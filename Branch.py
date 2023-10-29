@@ -18,7 +18,7 @@ class Branch(branch_pb2_grpc.RPCServicer):
         self.recvMsg = list()
         # iterate the processID of the branches
 
-    # Creates gRPC channel and client stub for each branch
+    # Create gRPC channel and client stub for each branch
     def createStubs(self):
         for branch_id in self.branches:
             if branch_id != self.id:

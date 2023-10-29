@@ -1,8 +1,9 @@
-import time
+from time import sleep
 
-import example_pb2
-import example_pb2_grpc
 import grpc
+
+import branch_pb2_grpc
+from branch_pb2 import MsgRequest
 
 
 class Customer:
@@ -16,10 +17,33 @@ class Customer:
         # pointer for the stub
         self.stub = None
 
-    # TODO: students are expected to create the Customer stub
+    # Create gRPC channel and client stub for branch
     def createStub(self):
-        pass
+        port = str(50000 + self.id)
+        channel = grpc.insecure_channel("localhost:" + port)
+        self.stub = branch_pb2_grpc.BranchStub(channel)
 
-    # TODO: students are expected to send out the events to the Bank
+    # Execute gRPC request for each event
     def executeEvents(self):
-        pass
+        for event in self.events:
+            if event["interface"] == "query":
+                sleep(3)
+
+            # send req to branch
+            res = self.stub.MsgDelivery(
+                MsgRequest(
+                    id=event["id"],
+                    interface=event["interface"],
+                    money=event["money"],
+                )
+            )
+
+            # create msg
+            msg = {"interface": res.interface, "result": res.result}
+            if res.interface == "query":
+                msg["money"] = res.money
+
+            self.recvMsg.append(msg)
+
+    def output(self):
+        return {"id": self.id, "recv": self.recvMsg}
