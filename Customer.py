@@ -34,7 +34,7 @@ class Customer:
             self.lastProcessedId = i
             print(
                 colored(
-                    f"processing {self.events[i]['interface']} Event with Index: {i}",
+                    f"processing {self.events[i]['interface']}...",
                     "yellow",
                 )
             )
