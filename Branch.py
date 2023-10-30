@@ -4,7 +4,7 @@ import branch_pb2_grpc
 from branch_pb2 import MsgRequest, MsgResponse
 
 
-class Branch(branch_pb2_grpc.RPCServicer):
+class Branch(branch_pb2_grpc.BranchServicer):
     def __init__(self, id, balance, branches):
         # unique ID of the Branch
         self.id = id
