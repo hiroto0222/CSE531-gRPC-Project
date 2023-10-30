@@ -1,18 +1,20 @@
 syntax = "proto3";
 
-message MsgRequest {
+message MsgDeliveryRequest {
   int32 id = 1;
-  string interface = 2;
-  int32 money = 3;
+  int32 event_id = 2;
+  string interface = 3;
+  int32 money = 4;
+  int32 balance = 5;
 }
 
-message MsgResponse {
-  string interface = 1;
-  string result = 2;
-  int32 money = 3;
+message MsgDeliveryResponse {
+  int32 id = 1;
+  int32 event_id = 2;
+  int32 balance = 3;
+  string result = 4;
 }
 
 service Branch {
-  rpc MsgDelivery(MsgRequest) returns (MsgResponse) {}
-  rpc MsgPropagation(MsgRequest) returns (MsgResponse) {}
+  rpc MsgDelivery(MsgDeliveryRequest) returns (MsgDeliveryResponse) {}
 }

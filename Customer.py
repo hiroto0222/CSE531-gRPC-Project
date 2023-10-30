@@ -1,49 +1,99 @@
-from time import sleep
+import json
+import sys
 
 import grpc
+from termcolor import colored
 
+import branch_pb2
 import branch_pb2_grpc
-from branch_pb2 import MsgRequest
 
 
 class Customer:
     def __init__(self, id, events):
-        # unique ID of the Customer
         self.id = id
-        # events from the input
         self.events = events
-        # a list of received messages used for debugging purpose
-        self.recvMsg = list()
-        # pointer for the stub
+        self.recvMsg = []
+        self.channel = None
         self.stub = None
+        self.port = 50000 + id
+        self.lastProcessedId = -1
 
-    # Create gRPC channel and client stub for branch
+    # Create client stub
     def createStub(self):
-        port = str(50000 + self.id)
-        channel = grpc.insecure_channel("localhost:" + port)
-        self.stub = branch_pb2_grpc.BranchStub(channel)
+        self.channel = grpc.insecure_channel(f"localhost:{self.port}")
+        self.stub = branch_pb2_grpc.BranchStub(self.channel)
 
-    # Execute gRPC request for each event
+    # Execute client called events
     def executeEvents(self):
-        for event in self.events:
-            if event["interface"] == "query":
-                sleep(3)
+        if not self.stub:
+            self.createStub()
 
-            # send req to branch
-            res = self.stub.MsgDelivery(
-                MsgRequest(
-                    id=event["id"],
-                    interface=event["interface"],
-                    money=event["money"],
+        res = {"id": self.id, "recv": []}
+
+        for i in range(self.lastProcessedId + 1, len(self.events)):
+            self.lastProcessedId = i
+            print(
+                colored(
+                    f"processing {self.events[i]['interface']} Event with Index: {i}",
+                    "yellow",
                 )
             )
+            curr_interface = self.events[i]["interface"]
+            curr_event_id = self.events[i]["id"]
 
-            # create msg
-            msg = {"interface": res.interface, "result": res.result}
-            if res.interface == "query":
-                msg["money"] = res.money
+            if curr_interface == "deposit":
+                response = self.stub.MsgDelivery(
+                    branch_pb2.MsgDeliveryRequest(
+                        id=self.id,
+                        event_id=curr_event_id,
+                        interface=curr_interface,
+                        money=self.events[i]["money"],
+                    )
+                )
+                res["recv"].append(
+                    {"interface": curr_interface, "result": response.result}
+                )
 
-            self.recvMsg.append(msg)
+            elif curr_interface == "query":
+                response = self.stub.MsgDelivery(
+                    branch_pb2.MsgDeliveryRequest(
+                        id=self.id,
+                        event_id=curr_event_id,
+                        interface=curr_interface,
+                    )
+                )
+                res["recv"].append(
+                    {"interface": curr_interface, "balance": response.balance}
+                )
 
-    def output(self):
-        return {"id": self.id, "recv": self.recvMsg}
+            elif curr_interface == "withdraw":
+                response = self.stub.MsgDelivery(
+                    branch_pb2.MsgDeliveryRequest(
+                        id=self.id,
+                        event_id=curr_event_id,
+                        interface=curr_interface,
+                        money=self.events[i]["money"],
+                    )
+                )
+                res["recv"].append(
+                    {"interface": curr_interface, "result": response.result}
+                )
+
+        return res
+
+
+if __name__ == "__main__":
+    file_path = f"{sys.argv[1]}"
+    with open(file_path, "r") as json_file:
+        data = json.load(json_file)
+
+    res = []
+
+    for i in range(len(data)):
+        if data[i]["type"] == "customer":
+            customer_id = data[i]["id"]
+            customer = Customer(customer_id, data[i]["events"])
+            res.append(customer.executeEvents())
+
+    with open("output.json", "w") as json_file:
+        json.dump(res, json_file)
