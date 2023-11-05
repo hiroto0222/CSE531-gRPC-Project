@@ -9,6 +9,7 @@ import branch_pb2
 import branch_pb2_grpc
 
 
+# Branch class serves as gRPC service handler
 class Branch(branch_pb2_grpc.BranchServicer):
     def __init__(self, id, balance, branches):
         self.id = id
