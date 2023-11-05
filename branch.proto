@@ -6,6 +6,7 @@ message MsgDeliveryRequest {
   string interface = 3;
   int32 money = 4;
   int32 balance = 5;
+  int32 clock = 6;
 }
 
 message MsgDeliveryResponse {
@@ -13,6 +14,7 @@ message MsgDeliveryResponse {
   int32 event_id = 2;
   int32 balance = 3;
   string result = 4;
+  int32 clock = 5;
 }
 
 service Branch {
