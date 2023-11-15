@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from concurrent import futures
 
@@ -18,6 +19,13 @@ class Branch(branch_pb2_grpc.BranchServicer):
         self.channels = []
         self.stubList = []
         self.recvMsg = []
+        self.clock = 0  # set initial logical clock as 0
+        self.logs = {
+            "id": self.id,
+            "type": "branch",
+            "events": [],
+        }  # log branch events
+        self.stubListBranches = []
 
     # Create channels and stubs for client
     def createStubs(self):
@@ -27,16 +35,75 @@ class Branch(branch_pb2_grpc.BranchServicer):
             self.channels.append(channel)
             stub = branch_pb2_grpc.BranchStub(channel)
             self.stubList.append(stub)
+            self.stubListBranches.append(branch)
 
-    # Process deposit request and return message
-    def ProcessDeposit(self, request):
+    def MsgDelivery(self, request, context):
+        self.recvMsg.append(request)
+        self.clock = max(self.clock, request.clock) + 1
+
+        if request.interface == "query":
+            res = self.Query(request=request)
+        elif request.interface == "deposit":
+            res = self.Deposit(request=request)
+        elif request.interface == "withdraw":
+            res = self.Withdraw(request=request)
+        elif request.interface == "propagatewithdraw":
+            res = self.PropagateWithdraw(request=request)
+        elif request.interface == "propagatedeposit":
+            res = self.PropagateDeposit(request=request)
+
+        id = res.get("id", None)
+        event_id = res.get("event_id", None)
+        balance = res.get("balance", None)
+        result = res.get("result", None)
+
+        # dump logs
+        filename = f"branch-{self.id}.json"
+        output_path = os.path.join("output", filename)
+        with open(output_path, "w") as file:
+            json.dump(self.branch_logs, file, indent=4)
+
+        return branch_pb2.MsgDeliveryResponse(
+            id=id,
+            event_id=event_id,
+            balance=balance,
+            result=result,
+            clock=self.clock,
+        )
+
+    def Deposit(self, request):
         self.balance += request.money
-        if len(self.channels) == 0:
+        self.branch_logs["events"].append(
+            {
+                "customer-request-id": request.event_id,
+                "logical_clock": self.clock,
+                "interface": "deposit",
+                "comment": f"event_recv from customer {request.id}",
+            }
+        )
+
+        if len(self.channelList) == 0:
             self.createStubs()
-        for stub in self.stubList:
+
+        for i in range(len(self.stubList)):
+            stub = self.stubList[i]
+            recv_branch = self.stubListBranches[i]
+            self.clock += 1
+            self.branch_logs["events"].append(
+                {
+                    "customer-request-id": request.event_id,
+                    "logical_clock": self.clock,
+                    "interface": "propogate_deposit",
+                    "comment": f"event_sent to branch {recv_branch}",
+                }
+            )
             stub.MsgDelivery(
                 branch_pb2.MsgDeliveryRequest(
-                    balance=self.balance, interface="propagate_deposit"
+                    id=self.id,
+                    event_id=request.event_id,
+                    balance=self.balance,
+                    interface="propagatedeposit",
+                    clock=self.clock,
                 )
             )
 
@@ -44,64 +111,81 @@ class Branch(branch_pb2_grpc.BranchServicer):
             "id": self.id,
             "event_id": request.event_id,
             "result": "success",
+            "clock": self.clock,
         }
 
-    # Process query request and return message
-    def ProcessQuery(self, request):
+    def Query(self, request):
         return {
             "id": self.id,
             "event_id": request.event_id,
             "balance": self.balance,
+            "clock": self.clock,
         }
 
-    # Process withdraw request and return message
-    def ProcessWithdraw(self, request):
-        result = "fail"
+    def Withdraw(self, request):
+        self.branch_logs["events"].append(
+            {
+                "customer-request-id": request.event_id,
+                "logical_clock": self.clock,
+                "interface": "deposit",
+                "comment": f"event_recv from customer {request.id}",
+            }
+        )
+
+        status = "fail"
         if self.balance >= request.money:
-            result = "success"
+            status = "success"
             self.balance -= request.money
-            if len(self.channels) == 0:
+
+            if len(self.channelList) == 0:
                 self.createStubs()
-            for stub in self.stubList:
+
+            for i in range(len(self.stubList)):
+                stub = self.stubList[i]
+                recv_branch = self.stubListBranches[i]
+                self.clock += 1
+                self.branch_logs["events"].append(
+                    {
+                        "customer-request-id": request.event_id,
+                        "logical_clock": self.clock,
+                        "interface": "propogate_withdraw",
+                        "comment": f"event_sent to branch {recv_branch}",
+                    }
+                )
                 stub.MsgDelivery(
                     branch_pb2.MsgDeliveryRequest(
-                        balance=self.balance, interface="propagate_withdraw"
+                        id=self.id,
+                        event_id=request.event_id,
+                        balance=self.balance,
+                        interface="propagatewithdraw",
+                        clock=self.clock,
                     )
                 )
+        return {"id": self.id, "event_id": request.event_id, "result": status}
 
-        return {"id": self.id, "event_id": request.event_id, "result": result}
-
-    # Process propagate deposit and return message
-    def ProcessPropagateDeposit(self, request):
+    def Propagate_Deposit(self, request):
         self.balance = request.balance
-        return {"result": "success"}
-
-    # Process propagate withdraw and return message
-    def ProcessPropagateWithdraw(self, request):
-        self.balance = request.balance
-        return {"result": "success"}
-
-    # Process recieved message
-    def MsgDelivery(self, request, context):
-        self.recvMsg.append(request)
-        if request.interface == "query":
-            msg = self.ProcessQuery(request=request)
-        elif request.interface == "deposit":
-            msg = self.ProcessDeposit(request=request)
-        elif request.interface == "withdraw":
-            msg = self.ProcessWithdraw(request=request)
-        elif request.interface == "propagate_deposit":
-            msg = self.ProcessPropagateDeposit(request=request)
-        elif request.interface == "propagate_withdraw":
-            msg = self.ProcessPropagateWithdraw(request=request)
-        id = msg.get("id", None)
-        event_id = msg.get("event_id", None)
-        balance = msg.get("balance", None)
-        result = msg.get("result", None)
-
-        return branch_pb2.MsgDeliveryResponse(
-            id=id, event_id=event_id, balance=balance, result=result
+        self.branch_logs["events"].append(
+            {
+                "customer-request-id": request.event_id,
+                "logical_clock": self.clock,
+                "interface": "propogate_deposit",
+                "comment": f"event_recv from bank {request.id}",
+            }
         )
+        return {"result": "success"}
+
+    def Propagate_Withdraw(self, request):
+        self.balance = request.balance
+        self.branch_logs["events"].append(
+            {
+                "customer-request-id": request.event_id,
+                "logical_clock": self.clock,
+                "interface": "propogate_withdraw",
+                "comment": f"event_recv from bank {request.id}",
+            }
+        )
+        return {"result": "success"}
 
 
 # Start servers for each branch
