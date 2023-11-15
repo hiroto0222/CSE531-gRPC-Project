@@ -61,7 +61,7 @@ class Branch(branch_pb2_grpc.BranchServicer):
         filename = f"branch-{self.id}.json"
         output_path = os.path.join("output", filename)
         with open(output_path, "w") as file:
-            json.dump(self.branch_logs, file, indent=4)
+            json.dump(self.logs, file, indent=4)
 
         return branch_pb2.MsgDeliveryResponse(
             id=id,
@@ -73,7 +73,7 @@ class Branch(branch_pb2_grpc.BranchServicer):
 
     def Deposit(self, request):
         self.balance += request.money
-        self.branch_logs["events"].append(
+        self.logs["events"].append(
             {
                 "customer-request-id": request.event_id,
                 "logical_clock": self.clock,
@@ -82,14 +82,14 @@ class Branch(branch_pb2_grpc.BranchServicer):
             }
         )
 
-        if len(self.channelList) == 0:
+        if len(self.channels) == 0:
             self.createStubs()
 
         for i in range(len(self.stubList)):
             stub = self.stubList[i]
             recv_branch = self.stubListBranches[i]
             self.clock += 1
-            self.branch_logs["events"].append(
+            self.logs["events"].append(
                 {
                     "customer-request-id": request.event_id,
                     "logical_clock": self.clock,
@@ -123,7 +123,7 @@ class Branch(branch_pb2_grpc.BranchServicer):
         }
 
     def Withdraw(self, request):
-        self.branch_logs["events"].append(
+        self.logs["events"].append(
             {
                 "customer-request-id": request.event_id,
                 "logical_clock": self.clock,
@@ -137,14 +137,14 @@ class Branch(branch_pb2_grpc.BranchServicer):
             status = "success"
             self.balance -= request.money
 
-            if len(self.channelList) == 0:
+            if len(self.channels) == 0:
                 self.createStubs()
 
             for i in range(len(self.stubList)):
                 stub = self.stubList[i]
                 recv_branch = self.stubListBranches[i]
                 self.clock += 1
-                self.branch_logs["events"].append(
+                self.logs["events"].append(
                     {
                         "customer-request-id": request.event_id,
                         "logical_clock": self.clock,
@@ -163,9 +163,9 @@ class Branch(branch_pb2_grpc.BranchServicer):
                 )
         return {"id": self.id, "event_id": request.event_id, "result": status}
 
-    def Propagate_Deposit(self, request):
+    def PropagateDeposit(self, request):
         self.balance = request.balance
-        self.branch_logs["events"].append(
+        self.logs["events"].append(
             {
                 "customer-request-id": request.event_id,
                 "logical_clock": self.clock,
@@ -175,9 +175,9 @@ class Branch(branch_pb2_grpc.BranchServicer):
         )
         return {"result": "success"}
 
-    def Propagate_Withdraw(self, request):
+    def PropagateWithdraw(self, request):
         self.balance = request.balance
-        self.branch_logs["events"].append(
+        self.logs["events"].append(
             {
                 "customer-request-id": request.event_id,
                 "logical_clock": self.clock,
