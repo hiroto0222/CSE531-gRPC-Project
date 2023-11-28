@@ -14,10 +14,10 @@ message RequestElement {
 // Response Interface
 message MsgDeliveryResponse {
   int32 id = 1;
-  repeated MessageRecieved recv = 2;
+  repeated MessageReceived recv = 2;
 }
 
-message MessageRecieved {
+message MessageReceived {
   string interface = 1;
   ResponseResult result = 2;
 }
