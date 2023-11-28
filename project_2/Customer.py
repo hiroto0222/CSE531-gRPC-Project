@@ -3,11 +3,10 @@ import json
 import os
 import sys
 
-import grpc
-from termcolor import colored
-
 import branch_pb2
 import branch_pb2_grpc
+import grpc
+from termcolor import colored
 
 
 class Customer:
